@@ -1,0 +1,98 @@
+# import datasets:
+library(readr)
+shhs1_dataset_0_15_0 <- read_csv("~/Research/Sleep Health Heart study/shhs1-dataset-0.15.0.csv")
+shhs2_dataset_0_15_0 <- read_csv("~/Research/Sleep Health Heart study/shhs2-dataset-0.15.0.csv")
+
+#Keeping only relevant variables from SHHS1
+SHHS1clean <-shhs1_dataset_0_15_0[, c("pptid", "ahi_a0h3a" , "ahi_a0h4", "ahi_a0h3", "DiasBP", "SystBP", "bmi_s1", "age_s1", "gender", "educat" , "height", "Hip" , "waist", "weight", "slptime", "HTNMED1"  )]
+
+#Keeping only relevant variables from SHHS2
+SHHS2clean <-shhs2_dataset_0_15_0[, c("pptid", "avg23bpd_s2", "avg23bps_s2", "bmi_s2", "age_s2", "HTNMED2"  )]
+
+#removing initial datasets to free memory
+rm (shhs1_dataset_0_15_0)
+rm (shhs2_dataset_0_15_0)
+
+#Eliminating people with HTN:
+SHHS1clean <- subset(SHHS1clean, (DiasBP < 80))
+SHHS1clean <- subset(SHHS1clean, (SystBP < 120))
+SHHS1clean <- subset(SHHS1clean, (HTNMED1 == 0))
+
+#installing Dplyr to merge both datasets more easily
+library (dplyr)
+
+#keeping only those records that didn't have HTN at baseline and combining with data from 2nd visit
+SHHSTotal <- inner_join(SHHS1clean, SHHS2clean, by="pptid") #see inner_join details if needed
+
+#keeping only the final dataset
+rm (SHHS1clean, SHHS2clean)
+
+#Creating derived variables for analysis
+#change in age and BMI
+SHHSTotal$changeAge <- SHHSTotal$age_s2 - SHHSTotal$age_s1
+SHHSTotal$changeBMI <- SHHSTotal$bmi_s2 - SHHSTotal$bmi_s1
+
+#OSA diagnosis based on AHI levels and making them logical
+SHHSTotal$NOOSA3a <- 'TRUE'
+SHHSTotal$NOOSA3a <- as.logical(SHHSTotal$NOOSA3a)
+SHHSTotal$MILDOSA3a <- 'TRUE'
+SHHSTotal$MILDOSA3a <- as.logical(SHHSTotal$MILDOSA3a)
+SHHSTotal$MODOSA3a <- 'TRUE'
+SHHSTotal$MODOSA3a <- as.logical(SHHSTotal$MODOSA3a)
+SHHSTotal$SEVOSA3a <- 'TRUE'
+SHHSTotal$SEVOSA3a <- as.logical(SHHSTotal$SEVOSA3a)
+
+SHHSTotal$NOOSA4 <- 'TRUE'
+SHHSTotal$NOOSA4 <- as.logical(SHHSTotal$NOOSA4)
+SHHSTotal$MILDOSA4 <- 'TRUE'
+SHHSTotal$MILDOSA4 <- as.logical(SHHSTotal$MILDOSA4)
+SHHSTotal$MODOSA4 <- 'TRUE'
+SHHSTotal$MODOSA4 <- as.logical(SHHSTotal$MODOSA4)
+SHHSTotal$SEVOSA4 <- 'TRUE'
+SHHSTotal$SEVOSA4 <- as.logical(SHHSTotal$SEVOSA4)
+
+SHHSTotal$OSABY3aNOT4 <- 'TRUE'
+SHHSTotal$OSABY3aNOT4 <- as.logical(SHHSTotal$OSABY3aNOT4)
+
+SHHSTotal$NOHTNFU <- 'TRUE'
+SHHSTotal$NOHTNFU<- as.logical(SHHSTotal$NOHTNFU)
+SHHSTotal$ELEVBPFU <- 'TRUE'
+SHHSTotal$ELEVBPFU <- as.logical(SHHSTotal$ELEVBPFU)
+SHHSTotal$STAGE1HTNFU <- 'TRUE'
+SHHSTotal$STAGE1HTNFU <- as.logical(SHHSTotal$STAGE1HTNFU)
+SHHSTotal$STAGE2HTNFU <- 'TRUE'
+SHHSTotal$STAGE2HTNFU <- as.logical(SHHSTotal$STAGE2HTNFU)
+
+#Assigning values to new variables
+SHHSTotal$NOOSA3a <- ifelse (SHHSTotal$ahi_a0h3a < 5, TRUE, FALSE)
+SHHSTotal$MILDOSA3a <- ifelse ((SHHSTotal$ahi_a0h3a >=5 & SHHSTotal$ahi_a0h3a <15), TRUE, FALSE)
+SHHSTotal$MODOSA3a <- ifelse ((SHHSTotal$ahi_a0h3a >=15 & SHHSTotal$ahi_a0h3a <30), TRUE, FALSE)
+SHHSTotal$SEVOSA3a <- ifelse (SHHSTotal$ahi_a0h3a >=30 , TRUE, FALSE)
+
+SHHSTotal$NOOSA4 <- ifelse (SHHSTotal$ahi_a0h4 < 5, TRUE, FALSE)
+SHHSTotal$MILDOSA4 <- ifelse ((SHHSTotal$ahi_a0h4 >=5 & SHHSTotal$ahi_a0h4 <15), TRUE, FALSE)
+SHHSTotal$MODOSA4 <- ifelse ((SHHSTotal$ahi_a0h4 >=15 & SHHSTotal$ahi_a0h4 <30), TRUE, FALSE)
+SHHSTotal$SEVOSA4 <- ifelse (SHHSTotal$ahi_a0h4 >=30 , TRUE, FALSE)
+
+write.csv(SHHSTotal, 'EntireDAta.csv')
+
+
+
+SHHSTotal$OSABY3aNOT4 <- ifelse ((SHHSTotal$NOOSA3a == FALSE & SHHSTotal$NOOSA4 == TRUE) , TRUE, FALSE)
+
+#did not develop HTN
+SHHSTotal$NOHTNFU <- ifelse ((SHHSTotal$avg23bpd_s2 < 80 & SHHSTotal$avg23bps_s2 <120 & SHHSTotal$HTNMED2 == 0), TRUE, FALSE)
+
+#Elevated BP and HTN by stages
+
+## Normal: Less than 120/80 mm Hg, No Medication
+## Elevated: Systolic between 120-129 and diastolic less than 80;
+## Stage 1: Systolic between 130-139 or diastolic between 80-89;
+## Stage 2: Systolic at least 140 or diastolic at least 90 mm Hg;
+
+
+SHHSTotal$ELEVBPFU <- ifelse ((SHHSTotal$avg23bpd_s2 < 80 & SHHSTotal$avg23bps_s2 >=120 & SHHSTotal$avg23bps_s2 <=129 ), TRUE, FALSE)
+
+SHHSTotal$STAGE1HTNFU <- ifelse (((SHHSTotal$avg23bpd_s2 >= 80 & SHHSTotal$avg23bpd_s2 <= 89) | (SHHSTotal$avg23bps_s2 >=130 & SHHSTotal$avg23bps_s2 <=139)), TRUE, FALSE)
+
+SHHSTotal$STAGE2HTNFU <- ifelse ((SHHSTotal$avg23bpd_s2 >= 90 | SHHSTotal$avg23bps_s2 >= 140), TRUE, FALSE)
