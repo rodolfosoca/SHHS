@@ -2,12 +2,14 @@
 library(readr)
 shhs1_dataset_0_15_0 <- read_csv("~/Research/Sleep Health Heart study/shhs1-dataset-0.15.0.csv")
 shhs2_dataset_0_15_0 <- read_csv("~/Research/Sleep Health Heart study/shhs2-dataset-0.15.0.csv")
+shhs_interim_followup_dataset_0_15_0 <- read_csv("shhs-interim-followup-dataset-0.15.0.csv")
 
 #Keeping only relevant variables from SHHS1
-SHHS1clean <-shhs1_dataset_0_15_0[, c("pptid", "ahi_a0h3a" , "ahi_a0h4", "ahi_a0h3", "DiasBP", "SystBP", "bmi_s1", "age_s1", "gender", "educat" , "height", "Hip" , "waist", "weight", "slptime", "HTNMED1"  )]
-
+SHHS1clean <-shhs1_dataset_0_15_0[, c("nsrrid","pptid", "ahi_a0h3a" , "ahi_a0h4", "ahi_a0h3", "DiasBP", "SystBP", "bmi_s1", "age_s1", "gender", "educat" , "height", "Hip" , "waist", "weight", "slptime", "HTNMED1"  )]
 #Keeping only relevant variables from SHHS2
-SHHS2clean <-shhs2_dataset_0_15_0[, c("pptid", "avg23bpd_s2", "avg23bps_s2", "bmi_s2", "age_s2", "HTNMED2"  )]
+SHHS2clean <-shhs2_dataset_0_15_0[, c("nsrrid", "pptid", "avg23bpd_s2", "avg23bps_s2", "bmi_s2", "age_s2", "HTNMED2"  )]
+#keeping only BP variables from interim
+interimclean <- shhs_interim_followup_dataset_0_15_0 [,c("nsrrid" , "avgSys" , "avgDias")]
 
 #removing initial datasets to free memory
 rm (shhs1_dataset_0_15_0)
@@ -96,3 +98,31 @@ SHHSTotal$ELEVBPFU <- ifelse ((SHHSTotal$avg23bpd_s2 < 80 & SHHSTotal$avg23bps_s
 SHHSTotal$STAGE1HTNFU <- ifelse (((SHHSTotal$avg23bpd_s2 >= 80 & SHHSTotal$avg23bpd_s2 <= 89) | (SHHSTotal$avg23bps_s2 >=130 & SHHSTotal$avg23bps_s2 <=139)), TRUE, FALSE)
 
 SHHSTotal$STAGE2HTNFU <- ifelse ((SHHSTotal$avg23bpd_s2 >= 90 | SHHSTotal$avg23bps_s2 >= 140), TRUE, FALSE)
+
+# creating a subset that contains missing HTN at follow ups
+onlyNAHTN <- subset(SHHSTotal, is.na (NOHTNFU))
+#renaming the id column to be able to use dpyr later:
+onlyNAHTN <- onlyNAHTN %>% rename (nsrrid = nsrrid.x)
+
+#keeping only those records that are missing HTN at fu.
+BPInterim <- semi_join(interimclean, onlyNAHTN, by="nsrrid")
+
+#creating logical variables for HTN calculation interim
+BPInterim$NOHTNInt <- 'TRUE'
+BPInterim$NOHTNInt<- as.logical(BPInterim$NOHTNInt)
+BPInterim$ELEVBPInt <- 'TRUE'
+BPInterim$ELEVBPInt <- as.logical(BPInterim$ELEVBPInt)
+BPInterim$STAGE1HTNInt <- 'TRUE'
+BPInterim$STAGE1HTNInt <- as.logical(BPInterim$STAGE1HTNInt)
+BPInterim$STAGE2HTNInt <- 'TRUE'
+BPInterim$STAGE2HTNInt <- as.logical(BPInterim$STAGE2HTNInt)
+
+#Calculating BP categories for interim analysis
+BPInterim$NOHTNInt <- ifelse ((BPInterim$avgDiast < 80 & BPInterim$avgSys <120), TRUE, FALSE)
+
+BPInterim$ELEVBPInt <- ifelse ((BPInterim$avgDias < 80 & BPInterim$avgSys >=120 & BPInterim$avgSys <=129 ), TRUE, FALSE)
+
+BPInterim$STAGE1HTNInt <- ifelse (((BPInterim$avgDias >= 80 & BPInterim$avgDias <= 89) | (BPInterim$avgSys >=130 & BPInterim$avgSys <=139)), TRUE, FALSE)
+
+BPInterim$STAGE2HTNInt <- ifelse ((BPInterim$avgDias >= 90 | BPInterim$avgSys >= 140), TRUE, FALSE)
+
