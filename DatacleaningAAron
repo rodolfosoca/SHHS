@@ -126,3 +126,9 @@ BPInterim$STAGE1HTNInt <- ifelse (((BPInterim$avgDias >= 80 & BPInterim$avgDias 
 
 BPInterim$STAGE2HTNInt <- ifelse ((BPInterim$avgDias >= 90 | BPInterim$avgSys >= 140), TRUE, FALSE)
 
+#creating a large datset that contains that BP values from Interim visit left of the main results. 
+# All the subjects that have BP at follow up will have NA values for the interim visits because I am using left_join
+
+SHHSTotal <- SHHSTotal %>% rename (nsrrid = nsrrid.x)
+HTNInterimandFU <- left_join(SHHSTotal, BPInterim, by = "nsrrid")
+
