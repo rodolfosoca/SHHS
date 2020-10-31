@@ -2,18 +2,21 @@
 library(readr)
 shhs1_dataset_0_15_0 <- read_csv("~/Research/Sleep Health Heart study/shhs1-dataset-0.15.0.csv")
 shhs2_dataset_0_15_0 <- read_csv("~/Research/Sleep Health Heart study/shhs2-dataset-0.15.0.csv")
-shhs_interim_followup_dataset_0_15_0 <- read_csv("shhs-interim-followup-dataset-0.15.0.csv")
+shhs_interim_followup_dataset_0_15_0 <- read_csv("~/Research/Sleep Health Heart study/shhs-interim-followup-dataset-0.15.0.csv")
 
 #Keeping only relevant variables from SHHS1
-SHHS1clean <-shhs1_dataset_0_15_0[, c("nsrrid","pptid", "ahi_a0h3a" , "ahi_a0h4", "ahi_a0h3", "DiasBP", "SystBP", "bmi_s1", "age_s1", "gender", "educat" , "height", "Hip" , "waist", "weight", "slptime", "HTNMED1"  )]
+SHHS1clean <-shhs1_dataset_0_15_0[, c("nsrrid", "ahi_a0h3a" , "ahi_a0h4", "ahi_a0h3", "DiasBP", "SystBP", "bmi_s1", "age_s1", "gender",  "height",  "weight", "slptime", "HTNMED1"  )]
+
 #Keeping only relevant variables from SHHS2
-SHHS2clean <-shhs2_dataset_0_15_0[, c("nsrrid", "pptid", "avg23bpd_s2", "avg23bps_s2", "bmi_s2", "age_s2", "HTNMED2"  )]
-#keeping only BP variables from interim
+SHHS2clean <-shhs2_dataset_0_15_0[, c("nsrrid", "avg23bpd_s2", "avg23bps_s2", "age_s2", "HTNMED2"  )]
+
+#same for interim
 interimclean <- shhs_interim_followup_dataset_0_15_0 [,c("nsrrid" , "avgSys" , "avgDias")]
 
 #removing initial datasets to free memory
 rm (shhs1_dataset_0_15_0)
 rm (shhs2_dataset_0_15_0)
+rm (shhs_interim_followup_dataset_0_15_0)
 
 #Eliminating people with HTN:
 SHHS1clean <- subset(SHHS1clean, (DiasBP < 80))
@@ -24,15 +27,53 @@ SHHS1clean <- subset(SHHS1clean, (HTNMED1 == 0))
 library (dplyr)
 
 #keeping only those records that didn't have HTN at baseline and combining with data from 2nd visit
-SHHSTotal <- inner_join(SHHS1clean, SHHS2clean, by="pptid") #see inner_join details if needed
+SHHSTotal <- inner_join(SHHS1clean, SHHS2clean, by="nsrrid") #see inner_join details if needed
 
 #keeping only the final dataset
 rm (SHHS1clean, SHHS2clean)
 
-#Creating derived variables for analysis
-#change in age and BMI
-SHHSTotal$changeAge <- SHHSTotal$age_s2 - SHHSTotal$age_s1
-SHHSTotal$changeBMI <- SHHSTotal$bmi_s2 - SHHSTotal$bmi_s1
+# creating a separate dataset with NA values to get from interim
+onlyNA_DBP <- subset(SHHSTotal, is.na (avg23bpd_s2))
+
+#eliminating records from SHHSTotal DBP at follow up that were NA (140 in total)
+SHHSTotal <- SHHSTotal[!is.na(SHHSTotal$avg23bpd_s2), ]
+
+#changing one record to "0" due to missing data about bp meds at follow up.
+SHHSTotal [is.na (SHHSTotal)] <- 0
+
+### CReating a data set with missing values to process
+
+#keeping only those records that are missing HTN at fu.
+BPInterim <- semi_join(interimclean, onlyNA_DBP, by="nsrrid")
+
+#adding the BP values from the interim study
+availble_InterimBP <- left_join(onlyNA_DBP, BPInterim, by= "nsrrid")
+
+#changing the f/u BP values for those from the interim but keeping the variable names
+availble_InterimBP$avg23bpd_s2 <-availble_InterimBP$avgDias
+availble_InterimBP$avg23bps_s2 <-availble_InterimBP$avgSys
+
+#removing the variables from the itereim
+availble_InterimBP$avgDias <- NULL
+availble_InterimBP$avgSys <- NULL
+
+#removing variables that are not used
+rm (BPInterim)
+rm (onlyNA_DBP)
+
+#keeping only the interim records that had data
+interim_available <- availble_InterimBP[!is.na(availble_InterimBP$avg23bpd_s2), ]
+interim_available <- availble_InterimBP[!is.na(availble_InterimBP$avg23bps_s2), ]
+
+#BP medications for F/u could be missing, changing the BP value from NA to 0 for the 52 records needed
+interim_available [is.na (interim_available)] <- 0
+
+#### adding the records that were recovered from the dataframe:
+SHHSTotal <- rbind (SHHSTotal, interim_available)
+
+#removing all varaibles except the one that has all the records
+rm (interim_available, availble_InterimBP)
+
 
 #OSA diagnosis based on AHI levels and making them logical
 SHHSTotal$NOOSA3a <- 'TRUE'
@@ -65,70 +106,37 @@ SHHSTotal$STAGE1HTNFU <- as.logical(SHHSTotal$STAGE1HTNFU)
 SHHSTotal$STAGE2HTNFU <- 'TRUE'
 SHHSTotal$STAGE2HTNFU <- as.logical(SHHSTotal$STAGE2HTNFU)
 
+
 #Assigning values to new variables
 SHHSTotal$NOOSA3a <- ifelse (SHHSTotal$ahi_a0h3a < 5, TRUE, FALSE)
 SHHSTotal$MILDOSA3a <- ifelse ((SHHSTotal$ahi_a0h3a >=5 & SHHSTotal$ahi_a0h3a <15), TRUE, FALSE)
 SHHSTotal$MODOSA3a <- ifelse ((SHHSTotal$ahi_a0h3a >=15 & SHHSTotal$ahi_a0h3a <30), TRUE, FALSE)
 SHHSTotal$SEVOSA3a <- ifelse (SHHSTotal$ahi_a0h3a >=30 , TRUE, FALSE)
 
+
+
 SHHSTotal$NOOSA4 <- ifelse (SHHSTotal$ahi_a0h4 < 5, TRUE, FALSE)
 SHHSTotal$MILDOSA4 <- ifelse ((SHHSTotal$ahi_a0h4 >=5 & SHHSTotal$ahi_a0h4 <15), TRUE, FALSE)
 SHHSTotal$MODOSA4 <- ifelse ((SHHSTotal$ahi_a0h4 >=15 & SHHSTotal$ahi_a0h4 <30), TRUE, FALSE)
 SHHSTotal$SEVOSA4 <- ifelse (SHHSTotal$ahi_a0h4 >=30 , TRUE, FALSE)
 
-write.csv(SHHSTotal, 'EntireDAta.csv')
-
 
 
 SHHSTotal$OSABY3aNOT4 <- ifelse ((SHHSTotal$NOOSA3a == FALSE & SHHSTotal$NOOSA4 == TRUE) , TRUE, FALSE)
 
+#### this is only needed to check is NA values are present:
+colSums(is.na (SHHSTotal))
+
+
+
 #did not develop HTN
 SHHSTotal$NOHTNFU <- ifelse ((SHHSTotal$avg23bpd_s2 < 80 & SHHSTotal$avg23bps_s2 <120 & SHHSTotal$HTNMED2 == 0), TRUE, FALSE)
 
-#Elevated BP and HTN by stages
-
-## Normal: Less than 120/80 mm Hg, No Medication
-## Elevated: Systolic between 120-129 and diastolic less than 80;
-## Stage 1: Systolic between 130-139 or diastolic between 80-89;
-## Stage 2: Systolic at least 140 or diastolic at least 90 mm Hg;
-
-
 SHHSTotal$ELEVBPFU <- ifelse ((SHHSTotal$avg23bpd_s2 < 80 & SHHSTotal$avg23bps_s2 >=120 & SHHSTotal$avg23bps_s2 <=129 ), TRUE, FALSE)
 
-SHHSTotal$STAGE1HTNFU <- ifelse (((SHHSTotal$avg23bpd_s2 >= 80 & SHHSTotal$avg23bpd_s2 <= 89) | (SHHSTotal$avg23bps_s2 >=130 & SHHSTotal$avg23bps_s2 <=139)), TRUE, FALSE)
+### not working well for stage 1
+SHHSTotal$STAGE1HTNFU <- ifelse (((SHHSTotal$avg23bpd_s2 >= 80 & SHHSTotal$avg23bpd_s2 <= 89) | (SHHSTotal$avg23bps_s2 >=130 & SHHSTotal$avg23bps_s2 <=139) ), TRUE, FALSE)
+
 
 SHHSTotal$STAGE2HTNFU <- ifelse ((SHHSTotal$avg23bpd_s2 >= 90 | SHHSTotal$avg23bps_s2 >= 140), TRUE, FALSE)
-
-# creating a subset that contains missing HTN at follow ups
-onlyNAHTN <- subset(SHHSTotal, is.na (NOHTNFU))
-#renaming the id column to be able to use dpyr later:
-onlyNAHTN <- onlyNAHTN %>% rename (nsrrid = nsrrid.x)
-
-#keeping only those records that are missing HTN at fu.
-BPInterim <- semi_join(interimclean, onlyNAHTN, by="nsrrid")
-
-#creating logical variables for HTN calculation interim
-BPInterim$NOHTNInt <- 'TRUE'
-BPInterim$NOHTNInt<- as.logical(BPInterim$NOHTNInt)
-BPInterim$ELEVBPInt <- 'TRUE'
-BPInterim$ELEVBPInt <- as.logical(BPInterim$ELEVBPInt)
-BPInterim$STAGE1HTNInt <- 'TRUE'
-BPInterim$STAGE1HTNInt <- as.logical(BPInterim$STAGE1HTNInt)
-BPInterim$STAGE2HTNInt <- 'TRUE'
-BPInterim$STAGE2HTNInt <- as.logical(BPInterim$STAGE2HTNInt)
-
-#Calculating BP categories for interim analysis
-BPInterim$NOHTNInt <- ifelse ((BPInterim$avgDiast < 80 & BPInterim$avgSys <120), TRUE, FALSE)
-
-BPInterim$ELEVBPInt <- ifelse ((BPInterim$avgDias < 80 & BPInterim$avgSys >=120 & BPInterim$avgSys <=129 ), TRUE, FALSE)
-
-BPInterim$STAGE1HTNInt <- ifelse (((BPInterim$avgDias >= 80 & BPInterim$avgDias <= 89) | (BPInterim$avgSys >=130 & BPInterim$avgSys <=139)), TRUE, FALSE)
-
-BPInterim$STAGE2HTNInt <- ifelse ((BPInterim$avgDias >= 90 | BPInterim$avgSys >= 140), TRUE, FALSE)
-
-#creating a large datset that contains that BP values from Interim visit left of the main results. 
-# All the subjects that have BP at follow up will have NA values for the interim visits because I am using left_join
-
-SHHSTotal <- SHHSTotal %>% rename (nsrrid = nsrrid.x)
-HTNInterimandFU <- left_join(SHHSTotal, BPInterim, by = "nsrrid")
 
